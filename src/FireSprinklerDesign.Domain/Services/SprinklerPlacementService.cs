@@ -1,13 +1,11 @@
-using FireSprinklerDesign.Domain.Abstractions;
+﻿using FireSprinklerDesign.Domain.Abstractions;
 using FireSprinklerDesign.Domain.Entities;
 using FireSprinklerDesign.Domain.ValueObjects;
 
 namespace FireSprinklerDesign.Domain.Services;
 
-public class SprinklerPlacementService(IGeometryService geometryService) : ISprinklerPlanner
+public class SprinklerPlacementService : ISprinklerPlanner
 {
-    private readonly IGeometryService geometryService = geometryService ?? throw new ArgumentNullException(nameof(geometryService));
-
     public IReadOnlyList<Sprinkler> PlanSprinklers(Room room, double wallOffset, double spacing)
     {
         ArgumentNullException.ThrowIfNull(room);
@@ -18,33 +16,49 @@ public class SprinklerPlacementService(IGeometryService geometryService) : ISpri
         if (spacing <= 0)
             throw new ArgumentOutOfRangeException(nameof(spacing), "Spacing must be positive.");
 
-        // Create inset polygon (shrink by wall offset)
-        var insetPolygon = geometryService.InsetPolygon(room.CeilingCorners, wallOffset);
+        var corners = room.CeilingCorners;
 
-        if (insetPolygon.Count < 3)
+        var origin = corners[1];
+
+        var edgeU = corners[0] - corners[1];
+        var edgeV = corners[2] - corners[1];
+
+        double lengthU = Math.Sqrt(edgeU.X * edgeU.X + edgeU.Y * edgeU.Y);
+        double lengthV = Math.Sqrt(edgeV.X * edgeV.X + edgeV.Y * edgeV.Y);
+
+        double effectiveLengthU = lengthU - 2 * wallOffset;
+        double effectiveLengthV = lengthV - 2 * wallOffset;
+
+        if (effectiveLengthU < -1e-9 || effectiveLengthV < -1e-9)
             return Array.Empty<Sprinkler>();
 
-        // Get bounding box for grid generation
-        var (min, max) = geometryService.GetBoundingBox(insetPolygon);
+        int countU = (int)Math.Floor(effectiveLengthU / spacing + 1e-9) + 1;
+        int countV = (int)Math.Floor(effectiveLengthV / spacing + 1e-9) + 1;
 
-        // Calculate the average Z height for sprinkler placement
-        var ceilingZ = room.GetAverageCeilingHeight();
+        var uUnit = new Vector3D(edgeU.X / lengthU, edgeU.Y / lengthU, 0);
+        var vUnit = new Vector3D(edgeV.X / lengthV, edgeV.Y / lengthV, 0);
 
-        // Generate grid points
-        var sprinklers = new List<Sprinkler>();
-        int sprinklerId = 1;
+        double zStart = corners[1].Z;
+        double zEnd = corners[2].Z;
 
-        // Start from min + offset to ensure proper spacing from walls
-        for (double x = min.X; x <= max.X; x += spacing)
+        var sprinklers = new List<Sprinkler>(countU * countV);
+        int id = 1;
+
+        for (int i = 0; i < countU; i++)
         {
-            for (double y = min.Y; y <= max.Y; y += spacing)
-            {
-                var candidatePoint = new Point3D(x, y, ceilingZ);
+            double uDistance = wallOffset + i * spacing;
 
-                if (geometryService.IsPointInsidePolygon(candidatePoint, insetPolygon))
-                {
-                    sprinklers.Add(new Sprinkler(sprinklerId++, candidatePoint));
-                }
+            for (int j = 0; j < countV; j++)
+            {
+                double vDistance = wallOffset + j * spacing;
+
+                double worldX = origin.X + uDistance * uUnit.X + vDistance * vUnit.X;
+                double worldY = origin.Y + uDistance * uUnit.Y + vDistance * vUnit.Y;
+
+                double t = vDistance / lengthV;
+                double worldZ = zStart + t * (zEnd - zStart);
+
+                sprinklers.Add(new Sprinkler(id++, new Point3D(worldX, worldY, worldZ)));
             }
         }
 

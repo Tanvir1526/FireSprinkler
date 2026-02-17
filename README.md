@@ -2,6 +2,7 @@
 
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Build](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen.svg)]()
 
 A fire protection engineering solution that calculates optimal sprinkler placement and water pipe connections for building safety compliance.
 
@@ -52,28 +53,23 @@ flowchart TB
     end
 
     subgraph Application["Application Layer"]
-        UseCase["CalculateSprinklerLayoutUseCase"]
-        Strategy["IPlacementStrategy"]
-        Factory["PlacementStrategyFactory"]
-    end
+    UseCase["CalculateSprinklerLayoutUseCase"]
+    Strategy["IPlacementStrategy"]
+    Factory["PlacementStrategyFactory"]
+end
 
-    subgraph Domain["Domain Layer"]
-        Entities["Entities"]
-        Services["Domain Services"]
-        ValueObjects["Value Objects"]
-        Abstractions["Abstractions"]
-    end
+subgraph Domain["Domain Layer"]
+    Entities["Entities"]
+    Services["Domain Services"]
+    ValueObjects["Value Objects"]
+    Abstractions["Abstractions"]
+end
 
-    subgraph Infrastructure["Infrastructure Layer"]
-        GeometryService["GeometryService"]
-    end
-
-    Console --> UseCase
-    UseCase --> Strategy
-    UseCase --> Services
-    Strategy --> Services
-    Services --> Abstractions
-    GeometryService -.->|implements| Abstractions
+Console --> UseCase
+UseCase --> Strategy
+UseCase --> Services
+Strategy --> Services
+Services --> Abstractions
 ```
 
 ---
@@ -89,104 +85,59 @@ sequenceDiagram
     participant UC as UseCase
     participant PS as PlacementStrategy
     participant SP as SprinklerPlacementService
-    participant GS as GeometryService
     participant PC as PipeConnectionService
 
     C->>UC: Execute(room, pipes, wallOffset, spacing)
-    UC->>PS: PlaceSprinklers(room, wallOffset, spacing)
-    PS->>SP: PlanSprinklers(room, wallOffset, spacing)
-    SP->>GS: InsetPolygon(ceilingCorners, wallOffset)
-    GS-->>SP: Inset polygon (shrunk boundary)
-    SP->>GS: GetBoundingBox(insetPolygon)
-    GS-->>SP: Min/Max coordinates
-    loop For each grid point
-        SP->>GS: IsPointInsidePolygon(point, insetPolygon)
-        GS-->>SP: true/false
-    end
-    SP-->>UC: List of Sprinklers
-    UC->>PC: ConnectSprinklersToPipes(sprinklers, pipes)
-    loop For each sprinkler
-        PC->>PC: Find nearest pipe (min distance)
-        PC->>PC: Calculate connection point
-    end
-    PC-->>UC: Sprinklers with connections
-    UC-->>C: SprinklerLayoutResult
+UC->>PS: PlaceSprinklers(room, wallOffset, spacing)
+PS->>SP: PlanSprinklers(room, wallOffset, spacing)
+SP->>SP: Calculate room-aligned grid
+SP->>SP: Generate sprinkler positions
+SP-->>UC: List of Sprinklers
+UC->>PC: ConnectSprinklersToPipes(sprinklers, pipes)
+loop For each sprinkler
+    PC->>PC: Find nearest pipe (min distance)
+    PC->>PC: Calculate connection point
+end
+PC-->>UC: Sprinklers with connections
+UC-->>C: SprinklerLayoutResult
 ```
 
 ---
 
 ### Core Algorithms
 
-#### 1. Polygon Inset Algorithm
 
-Creates a safe placement boundary by shrinking the room perimeter:
+#### 1. Grid-Based Sprinkler Placement
 
-```
-┌─────────────────────────────────────┐
-│  Original Ceiling Boundary          │
-│    ┌─────────────────────────────┐  │
-│    │  ← 2500mm offset            │  │
-│    │    Inset Boundary           │  │
-│    │      (Safe Zone)            │  │
-│    │                             │  │
-│    └─────────────────────────────┘  │
-└─────────────────────────────────────┘
-```
-
-**Steps:**
-1. Calculate edge vectors between consecutive vertices
-2. Compute inward-pointing normals (perpendicular rotation)
-3. Calculate bisector at each corner
-4. Adjust offset distance based on corner angle
-5. Validate resulting polygon has positive area
-
----
-
-#### 2. Grid-Based Sprinkler Placement
-
-Generates candidate positions using an axis-aligned grid:
+Generates candidate positions using a **local coordinate system** aligned with room edges, supporting both axis-aligned and rotated rooms:
 
 ```
-Bounding Box (Min → Max)
+Room-Aligned Grid (supports rotation)
 ┌───────────────────────────┐
-│  ●     ●     ●     ●     │ ← Grid points
-│     ●     ●     ●        │   at 2500mm spacing
-│  ●     ●     ●     ●     │
+│  ●     ●     ●     ●     │ ← Grid points aligned
+│     ●     ●     ●        │   to room orientation
+│  ●     ●     ●     ●     │   at specified spacing
 │     ●     ●     ●        │
 └───────────────────────────┘
-● = Candidate position (validated via ray-casting)
+● = Sprinkler position
 ```
 
-**Algorithm:**
 
 ```
-FOR x = min.X TO max.X STEP spacing
-  FOR y = min.Y TO max.Y STEP spacing
-    IF IsPointInsidePolygon(x, y) THEN
-      ADD Sprinkler(x, y, ceilingZ)
-```
+origin    = corners[1]
+edgeU     = corners[0] - corners[1]  // First edge direction
+edgeV     = corners[2] - corners[1]  // Second edge direction
 
+FOR i = 0 TO countU
+  FOR j = 0 TO countV
+    uDistance = wallOffset + i * spacing
+    vDistance = wallOffset + j * spacing
+    position  = origin + uDistance * uUnit + vDistance * vUnit
+    ADD Sprinkler(position.X, position.Y, interpolatedZ)
+```
 ---
 
-#### 3. Point-in-Polygon Detection (Ray Casting)
-
-Determines if a sprinkler position falls within the valid ceiling area:
-
-```
-     Ray →
-─────────────────────────●────────────→
-          ╱╲          ╱   ╲
-         ╱  ╲   ●    ╱     ╲
-        ╱    ╲      ╱       ╲
-       ╱      ╲────╱         ╲
-
-Odd intersections  = INSIDE  ✓
-Even intersections = OUTSIDE ✗
-```
-
----
-
-#### 4. Nearest Pipe Connection
+#### 2. Nearest Pipe Connection
 
 For each sprinkler, finds the optimal connection point using line-segment projection:
 
@@ -215,7 +166,6 @@ FireSprinklerDesign/
 ├── src/
 │   ├── FireSprinklerDesign.Domain/          # Core business logic
 │   │   ├── Abstractions/                    # Interface contracts
-│   │   │   ├── IGeometryService.cs
 │   │   │   ├── IPipeConnectionService.cs
 │   │   │   └── ISprinklerPlanner.cs
 │   │   ├── Entities/                        # Domain entities
@@ -224,7 +174,7 @@ FireSprinklerDesign/
 │   │   │   └── Sprinkler.cs
 │   │   ├── Services/                        # Domain services
 │   │   │   ├── PipeConnectionService.cs
-│   │   │   └── SprinklerPlacementService.cs
+│   │   │   └── SprinklerPlacementService.cs # Computational geometry
 │   │   └── ValueObjects/                    # Immutable types
 │   │       ├── Point3D.cs
 │   │       ├── Vector3D.cs
@@ -238,10 +188,7 @@ FireSprinklerDesign/
 │   │   │   └── PlacementStrategyFactory.cs
 │   │   └── UseCases/
 │   │       └── CalculateSprinklerLayoutUseCase.cs
-│   │
-│   ├── FireSprinklerDesign.Infrastructure/  # External implementations
-│   │   └── Services/
-│   │       └── GeometryService.cs           # Computational geometry
+│   │      
 │   │
 │   └── FireSprinklerDesign.Console/         # Entry point
 │       ├── DependencyInjection/
@@ -289,8 +236,9 @@ dotnet test
 ## Sample Output
 
 
-<img width="641" height="979" alt="image" src="https://github.com/user-attachments/assets/13a529c9-27b9-4567-954f-ead70ac7ad83" />
-<img width="640" height="971" alt="image" src="https://github.com/user-attachments/assets/b27d737c-11cc-4d51-bc8c-2596cc333d0f" />
+<img width="572" height="1018" alt="image" src="https://github.com/user-attachments/assets/8c77c11c-76c5-4fd0-93e5-d476972f1858" />
+<img width="572" height="979" alt="image" src="https://github.com/user-attachments/assets/934c1004-97ba-4461-a0ae-5404fcfbf732" />
+<img width="572" height="733" alt="image" src="https://github.com/user-attachments/assets/863cfde2-e2f2-45ed-a2fe-c27b57a34c99" />
 
 ---
 
@@ -309,7 +257,7 @@ Open the file directly in any modern browser — no server or build step require
 
 > **To view:** Open `sprinkler_layout.html` in a browser after cloning the repository.
 
-<img width="1183" height="661" alt="image" src="https://github.com/user-attachments/assets/5f2bc0a2-130e-4c9c-8266-e69ba46dad30" />
+<img width="1274" height="642" alt="image" src="https://github.com/user-attachments/assets/02905b98-27fe-4a3c-8a00-01bb95f786be" />
 
 
 ---
@@ -318,12 +266,11 @@ Open the file directly in any modern browser — no server or build step require
 
 | Pattern | Implementation | Purpose |
 |---------|----------------|---------|
-| **Clean Architecture** | 4-layer project structure | Separation of concerns, testability |
+| **Clean Architecture** | 3-layer project structure | Separation of concerns, testability |
 | **Strategy Pattern** | `IPlacementStrategy` | Interchangeable placement algorithms |
 | **Factory Pattern** | `PlacementStrategyFactory` | Strategy instantiation & selection |
 | **Dependency Injection** | `ServiceCollection` | Loose coupling, configurability |
 | **Value Objects** | `Point3D`, `Vector3D`, `LineSegment3D` | Immutability, domain modeling |
-| **Repository Pattern** | Domain abstractions | Infrastructure independence |
 
 ---
 
@@ -332,9 +279,8 @@ Open the file directly in any modern browser — no server or build step require
 The solution includes comprehensive unit tests covering:
 
 - **Domain Logic**: Entity behavior, value object operations
-- **Geometry Calculations**: Point-in-polygon, polygon inset, distance calculations
 - **Service Layer**: Sprinkler placement, pipe connection algorithms
-- **Edge Cases**: Empty rooms, sharp corners, boundary conditions
+- **Edge Cases**: Empty rooms, boundary conditions
 
 ---
 ---

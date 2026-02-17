@@ -21,7 +21,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FireSprinklerDesign.Domain\FireSprinklerDesign.Domain.csproj" />
-    <ProjectReference Include="..\..\src\FireSprinklerDesign.Infrastructure\FireSprinklerDesign.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\FireSprinklerDesign.Application\FireSprinklerDesign.Application.csproj" />
   </ItemGroup>
 

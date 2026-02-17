@@ -1,62 +1,20 @@
-using FireSprinklerDesign.Domain.Abstractions;
-using FireSprinklerDesign.Domain.Entities;
+﻿using FireSprinklerDesign.Domain.Entities;
 using FireSprinklerDesign.Domain.Services;
 using FireSprinklerDesign.Domain.ValueObjects;
 using FluentAssertions;
-using Moq;
 using Xunit;
 
 namespace FireSprinklerDesign.Tests.Services;
 
 public class SprinklerPlacementServiceTests
 {
-    private readonly Mock<IGeometryService> _geometryServiceMock = new();
-    private readonly SprinklerPlacementService _sut;
-
-    public SprinklerPlacementServiceTests()
-    {
-        SetupDefaultMocks();
-        _sut = new SprinklerPlacementService(_geometryServiceMock.Object);
-    }
-
-    private void SetupDefaultMocks()
-    {
-        var defaultInset = new List<Point3D>
-        {
-            new(5, 5, 10), new(95, 5, 10), new(95, 95, 10), new(5, 95, 10)
-        };
-
-        _geometryServiceMock
-            .Setup(g => g.InsetPolygon(It.IsAny<IReadOnlyList<Point3D>>(), It.IsAny<double>()))
-            .Returns(defaultInset);
-
-        _geometryServiceMock
-            .Setup(g => g.GetBoundingBox(It.IsAny<IReadOnlyList<Point3D>>()))
-            .Returns((new Point3D(5, 5, 0), new Point3D(95, 95, 0)));
-
-        _geometryServiceMock
-            .Setup(g => g.IsPointInsidePolygon(It.IsAny<Point3D>(), It.IsAny<IReadOnlyList<Point3D>>()))
-            .Returns(true);
-    }
-
-    [Fact]
-    public void Constructor_NullGeometryService_ThrowsArgumentNullException()
-    {
-        // Act
-        var act = () => new SprinklerPlacementService(null!);
-
-        // Assert
-        act.Should().Throw<ArgumentNullException>()
-            .WithParameterName("geometryService");
-    }
+    private readonly SprinklerPlacementService _sut = new();
 
     [Fact]
     public void PlanSprinklers_NullRoom_ThrowsArgumentNullException()
     {
-        // Act
         var act = () => _sut.PlanSprinklers(null!, 1.0, 10.0);
 
-        // Assert
         act.Should().Throw<ArgumentNullException>()
             .WithParameterName("room");
     }
@@ -64,13 +22,10 @@ public class SprinklerPlacementServiceTests
     [Fact]
     public void PlanSprinklers_ZeroWallOffset_ThrowsArgumentOutOfRangeException()
     {
-        // Arrange
         var room = CreateTestRoom();
 
-        // Act
         var act = () => _sut.PlanSprinklers(room, 0, 10.0);
 
-        // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithParameterName("wallOffset");
     }
@@ -78,13 +33,10 @@ public class SprinklerPlacementServiceTests
     [Fact]
     public void PlanSprinklers_NegativeWallOffset_ThrowsArgumentOutOfRangeException()
     {
-        // Arrange
         var room = CreateTestRoom();
 
-        // Act
         var act = () => _sut.PlanSprinklers(room, -5, 10.0);
 
-        // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithParameterName("wallOffset");
     }
@@ -92,13 +44,10 @@ public class SprinklerPlacementServiceTests
     [Fact]
     public void PlanSprinklers_ZeroSpacing_ThrowsArgumentOutOfRangeException()
     {
-        // Arrange
         var room = CreateTestRoom();
 
-        // Act
         var act = () => _sut.PlanSprinklers(room, 1.0, 0);
 
-        // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithParameterName("spacing");
     }
@@ -106,128 +55,89 @@ public class SprinklerPlacementServiceTests
     [Fact]
     public void PlanSprinklers_NegativeSpacing_ThrowsArgumentOutOfRangeException()
     {
-        // Arrange
         var room = CreateTestRoom();
 
-        // Act
         var act = () => _sut.PlanSprinklers(room, 1.0, -10);
 
-        // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
             .WithParameterName("spacing");
     }
 
     [Fact]
-    public void PlanSprinklers_ValidInputs_CallsInsetPolygonWithCorrectParameters()
+    public void PlanSprinklers_AxisAlignedRoom_Returns15Sprinklers()
     {
-        // Arrange
-        var room = CreateTestRoom();
-        const double wallOffset = 5.0;
+        var room = CreateTestRoom(length: 150, width: 100);
 
-        // Act
-        _sut.PlanSprinklers(room, wallOffset, 10.0);
+        var sprinklers = _sut.PlanSprinklers(room, 25, 25);
 
-        // Assert
-        _geometryServiceMock.Verify(
-            g => g.InsetPolygon(room.CeilingCorners, wallOffset),
-            Times.Once);
+        sprinklers.Should().HaveCount(15);
     }
 
     [Fact]
-    public void PlanSprinklers_ValidInputs_ReturnsSprinklers()
+    public void PlanSprinklers_RotatedRoom_Returns15Sprinklers()
     {
-        // Arrange
-        var room = CreateTestRoom();
+        // The actual fire sprinkler room (~15000×10000), rotated ~37°
+        var room = CreateActualRoom();
 
-        // Act
-        var sprinklers = _sut.PlanSprinklers(room, 5.0, 30.0);
+        var sprinklers = _sut.PlanSprinklers(room, 2500, 2500);
 
-        // Assert
-        sprinklers.Should().NotBeEmpty();
+        sprinklers.Should().HaveCount(15);
     }
 
     [Fact]
     public void PlanSprinklers_SprinklersHaveUniqueIds()
     {
-        // Arrange
-        var room = CreateTestRoom();
+        var room = CreateTestRoom(length: 150, width: 100);
 
-        // Act
-        var sprinklers = _sut.PlanSprinklers(room, 5.0, 30.0);
+        var sprinklers = _sut.PlanSprinklers(room, 25, 25);
 
-        // Assert
         sprinklers.Select(s => s.Id).Should().OnlyHaveUniqueItems();
     }
 
     [Fact]
-    public void PlanSprinklers_SprinklersAtCeilingHeight()
+    public void PlanSprinklers_SprinklersAtAverageCeilingHeight()
     {
-        // Arrange
-        var room = CreateTestRoom(ceilingHeight: 12.0);
+        var room = CreateTestRoom(length: 150, width: 100, ceilingHeight: 12.0);
 
-        // Act
-        var sprinklers = _sut.PlanSprinklers(room, 5.0, 30.0);
+        var sprinklers = _sut.PlanSprinklers(room, 25, 25);
 
-        // Assert
-        sprinklers.Should().AllSatisfy(s => s.Position.Z.Should().BeApproximately(12.0, 1e-10));
+        sprinklers.Should().AllSatisfy(s =>
+            s.Position.Z.Should().BeApproximately(12.0, 1e-10));
     }
 
     [Fact]
-    public void PlanSprinklers_InsetTooSmall_ReturnsEmptyList()
+    public void PlanSprinklers_WallOffsetTooLarge_ReturnsEmpty()
     {
-        // Arrange
-        var room = CreateTestRoom();
-        _geometryServiceMock
-            .Setup(g => g.InsetPolygon(It.IsAny<IReadOnlyList<Point3D>>(), It.IsAny<double>()))
-            .Returns(new List<Point3D>()); // Empty inset
+        // 100×100 room with 60mm offset → effective = -20 → no sprinklers
+        var room = CreateTestRoom(length: 100, width: 100);
 
-        // Act
-        var sprinklers = _sut.PlanSprinklers(room, 5.0, 10.0);
+        var sprinklers = _sut.PlanSprinklers(room, 60, 10);
 
-        // Assert
         sprinklers.Should().BeEmpty();
     }
 
-    [Fact]
-    public void PlanSprinklers_PointOutsidePolygon_ExcludesPoint()
-    {
-        // Arrange
-        var room = CreateTestRoom();
-        _geometryServiceMock
-            .Setup(g => g.IsPointInsidePolygon(It.IsAny<Point3D>(), It.IsAny<IReadOnlyList<Point3D>>()))
-            .Returns(false);
 
-        // Act
-        var sprinklers = _sut.PlanSprinklers(room, 5.0, 30.0);
-
-        // Assert
-        sprinklers.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void PlanSprinklers_ChecksEachCandidatePoint()
-    {
-        // Arrange
-        var room = CreateTestRoom();
-
-        // Act
-        _sut.PlanSprinklers(room, 5.0, 30.0);
-
-        // Assert
-        _geometryServiceMock.Verify(
-            g => g.IsPointInsidePolygon(It.IsAny<Point3D>(), It.IsAny<IReadOnlyList<Point3D>>()),
-            Times.AtLeastOnce);
-    }
-
-    private static Room CreateTestRoom(double ceilingHeight = 10.0)
+    private static Room CreateTestRoom(double length = 100, double width = 100, double ceilingHeight = 10.0)
     {
         var corners = new List<Point3D>
         {
             new(0, 0, ceilingHeight),
-            new(100, 0, ceilingHeight),
-            new(100, 100, ceilingHeight),
-            new(0, 100, ceilingHeight)
+            new(length, 0, ceilingHeight),
+            new(length, width, ceilingHeight),
+            new(0, width, ceilingHeight)
         };
         return new Room(corners, "Test Room");
+    }
+
+    private static Room CreateActualRoom()
+    {
+        var corners = new List<Point3D>
+        {
+            new(97500.01, 34000.00, 2500.00),
+            new(85647.67, 43193.61, 2500.00),
+            new(91776.75, 51095.16, 2530.00),
+            new(103629.07, 41901.55, 2530.00)
+        };
+        return new Room(corners, "Fire Protection Zone A");
     }
 }
