@@ -18,6 +18,7 @@ A fire protection engineering solution that calculates optimal sprinkler placeme
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Sample Output](#sample-output)
+- [Visual Representation](#visual-representation)
 - [Design Patterns](#design-patterns)
 - [Testing](#testing)
 
@@ -290,6 +291,26 @@ dotnet test
 
 <img width="641" height="979" alt="image" src="https://github.com/user-attachments/assets/13a529c9-27b9-4567-954f-ead70ac7ad83" />
 <img width="640" height="971" alt="image" src="https://github.com/user-attachments/assets/b27d737c-11cc-4d51-bc8c-2596cc333d0f" />
+
+---
+
+## Visual Representation
+
+An interactive HTML visualization of the sprinkler layout is available at [`sprinkler_layout.html`](sprinkler_layout.html).
+
+Open the file directly in any modern browser — no server or build step required.
+
+### Preview
+
+### 🌐 Live Layout Visualization
+
+[Open Interactive Layout](https://tanvir1526.github.io/FireSprinkler/sprinkler_layout.html)
+
+
+> **To view:** Open `sprinkler_layout.html` in a browser after cloning the repository.
+
+<img width="1183" height="661" alt="image" src="https://github.com/user-attachments/assets/5f2bc0a2-130e-4c9c-8266-e69ba46dad30" />
+
 
 ---
 
