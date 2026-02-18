@@ -112,13 +112,13 @@ UC-->>C: SprinklerLayoutResult
 Generates candidate positions using a **local coordinate system** aligned with room edges, supporting both axis-aligned and rotated rooms:
 
 ```
-Room-Aligned Grid (supports rotation)
-┌───────────────────────────┐
-│  ●     ●     ●     ●     │ ← Grid points aligned
-│     ●     ●     ●        │   to room orientation
-│  ●     ●     ●     ●     │   at specified spacing
-│     ●     ●     ●        │
-└───────────────────────────┘
+┌──────────────────────────────────────────┐
+│   ●       ●       ●       ●       ●      │ ← Pipe 1 (5 sprinklers)
+│                                          │
+│   ●       ●       ●       ●       ●      │ ← Pipe 2 (5 sprinklers)
+│                                          │
+│   ●       ●       ●       ●       ●      │ ← Pipe 3 (5 sprinklers)
+└──────────────────────────────────────────┘
 ● = Sprinkler position
 ```
 
@@ -246,7 +246,7 @@ dotnet test
 
 An interactive HTML visualization of the sprinkler layout is available at [`sprinkler_layout.html`](sprinkler_layout.html).
 
-Open the file directly in any modern browser — no server or build step required.
+Open the file directly in any modern browser - no server or build step required.
 
 ### Preview
 
